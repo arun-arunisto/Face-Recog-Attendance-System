@@ -1,0 +1,246 @@
+# Smart Face Recognition Attendance System
+
+A production-quality full-stack biometric attendance management platform utilizing browser webcam computer vision, deep learning face encodings, and real-time WebSockets to identify students and mark institutional attendance automatically.
+
+Built as a modern monorepo with:
+- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, Three.js, React Three Fiber, Drei, Recharts, TanStack Query, Zustand, React Router, Axios.
+- **Backend**: Python 3.11, Django 5, Django REST Framework, Django Channels (Daphne ASGI), OpenCV, SimpleJWT, SQLite3 (with PostgreSQL support), openpyxl, drf-spectacular.
+
+---
+
+## System Architecture
+
+```
+Browser Camera (Webcam)
+         │
+         ▼
+ React Frontend Client (:5173)
+  ├── Three.js R3F 3D Scenes (HUD Scanner, Control Center, Student Donut Ring)
+  ├── Zustand Stores & TanStack Query
+  └── Axios Client
+         │
+         │  REST APIs (/api/) & WebSocket (/ws/recognition/{camera_id}/)
+         ▼
+ Django ASGI / Daphne Server (:8000)
+  ├── Auth & Permissions (JWT SimpleJWT, strict role isolation)
+  ├── Recognition Consumer & Pipeline
+  │     ├── OpenCV Frame Preprocessing (Quality, Lighting, Resizing)
+  │     ├── FaceRecognitionProvider (Real: OpenCV/face_recognition vs Development Mock)
+  │     └── Vector Distance & Confidence Matching (128-D Euclidean distance)
+  ├── Duplicate Attendance Protection Engine (Cooldown & Single Daily Mark)
+  ├── Report Streaming Generator (CSV & openpyxl XLSX)
+  └── Audit Logging Service
+         │
+         ▼
+  Database (db.sqlite3 / PostgreSQL)
+```
+
+---
+
+## Key Features
+
+1. **Strict Role Separation**:
+   - **ADMIN**: Complete dashboard, 3D Attendance Control Center, live recognition camera studio, student management, webcam face registration modal, attendance records, analytics, Excel/CSV reports, camera nodes, audit logs, settings.
+   - **STUDENT**: Isolated personal dashboard, 3D Attendance Ring with attendance percentage, today's check-in/out status, monthly attendance calendar, personal history logs. Students can never access or modify another student's data.
+
+2. **Computer Vision & Face Recognition Pipeline**:
+   - High-throughput WebSocket stream decoding base64 frames.
+   - Quality checks: lighting, contrast, face count validation (rejects 0 faces or multiple faces).
+   - 128-dimensional facial embedding vector extraction and comparison against registered student biometric templates.
+   - Duplicate check-in protection prevents redundant database insertions and records check-outs after configured cooldowns.
+
+3. **3D Visualizations & Accessibility**:
+   - **Admin Attendance Control Center**: Interactive 3D globe with orbiting student nodes and camera beacons.
+   - **Live Recognition Scanner**: Holographic laser sweep and neural connection matrix reacting to live matches.
+   - **Student Attendance Ring**: 3D donut progress ring with orbiting status satellites.
+   - **2D Fallback Mode**: Accessible 2D toggle respecting `prefers-reduced-motion` and low-power hardware.
+
+4. **Biometric Provider Abstraction**:
+   - `RealFaceRecognitionProvider`: Production pipeline leveraging OpenCV and deep embeddings.
+   - `DevelopmentFaceRecognitionProvider`: Deterministic mock adapter for automated testing and zero-hardware demo environments, with a prominent "DEVELOPMENT MODE" badge in the UI.
+
+---
+
+## Quickstart Guide (Localhost Prototype)
+
+### Prerequisites
+- **Node.js**: v18+ and `npm`
+- **Python**: 3.11 or 3.12 (virtual environment provided in `backend/.venv`)
+
+---
+
+### Step 1: Start Backend Server
+
+```powershell
+# Open terminal in project root
+cd backend
+
+# Activate virtual environment
+.\.venv\Scripts\Activate.ps1
+
+# Run migrations (already applied to db.sqlite3)
+python manage.py migrate
+
+# Seed initial admin, 12 students, cameras, and 30-day attendance history
+python manage.py seed_data
+
+# Start Daphne ASGI server on port 8000
+python manage.py runserver 8000
+```
+Backend will be live at `http://localhost:8000/`.
+
+---
+
+### Step 2: Start Frontend Client
+
+```powershell
+# Open a second terminal in project root
+cd frontend
+
+# Install packages (already completed)
+npm install
+
+# Start Vite dev server
+npm run dev
+```
+Frontend will be live at `http://localhost:5173/`.
+
+---
+
+## Default Login Credentials
+
+| Role | Email | Password | Access / Scope |
+|------|-------|----------|----------------|
+| **Admin** | `admin@example.com` | `Admin@123456` | Full administrative control |
+| **Student 1** | `arun.kumar@example.com` | `Student@123456` | Student `STU-2026-001` (CSE) |
+| **Student 2** | `priya.sharma@example.com` | `Student@123456` | Student `STU-2026-002` (CSE) |
+| **Student 3** | `rahul.verma@example.com` | `Student@123456` | Student `STU-2026-003` (IT) |
+
+*Tip: On the `/login` page, you can click the "Admin Demo" or "Student Demo" quick-fill buttons for 1-click access!*
+
+---
+
+## Interactive API Documentation
+
+Interactive OpenAPI / Swagger documentation is automatically generated by `drf-spectacular`:
+- **Swagger UI**: [http://localhost:8000/api/docs/](http://localhost:8000/api/docs/)
+- **ReDoc**: [http://localhost:8000/api/redoc/](http://localhost:8000/api/redoc/)
+- **OpenAPI Schema**: [http://localhost:8000/api/schema/](http://localhost:8000/api/schema/)
+
+---
+
+## API Endpoints Reference
+
+### Authentication
+- `POST /api/auth/login/`: Obtain JWT access and refresh tokens.
+- `POST /api/auth/refresh/`: Refresh JWT access token.
+- `POST /api/auth/logout/`: Invalidate session.
+- `GET  /api/auth/me/`: Retrieve authenticated user profile and role details.
+- `GET  /api/auth/departments/`: List academic departments.
+
+### Students
+- `GET    /api/students/`: List students (filterable by search, department, face status).
+- `POST   /api/students/`: Create student account & profile (Admin only).
+- `GET    /api/students/{id}/`: Retrieve student profile.
+- `PATCH  /api/students/{id}/`: Update student details (Admin only).
+- `DELETE /api/students/{id}/`: Delete student (Admin only).
+- `POST   /api/students/{id}/face/register/`: Register face biometric template from captured frames.
+- `POST   /api/students/{id}/face/verify/`: Test single frame against student template.
+- `DELETE /api/students/{id}/face/`: Clear stored face encoding (Admin only).
+
+### Attendance
+- `GET   /api/attendance/`: Query attendance records with filters.
+- `POST  /api/attendance/mark/`: Manually record attendance (Admin only).
+- `GET   /api/attendance/today/`: Today's summary and latest verified passes.
+- `GET   /api/attendance/calendar/`: Monthly calendar attendance breakdown.
+- `GET   /api/attendance/student/{student_id}/`: Specific student attendance logs (strict ownership check).
+
+### Analytics & Reports
+- `GET /api/analytics/overview/`: High-level KPIs and attendance trends.
+- `GET /api/analytics/daily/`: Daily attendance history.
+- `GET /api/analytics/weekly/`: Weekly aggregated attendance.
+- `GET /api/analytics/departments/`: Department attendance statistics.
+- `GET /api/reports/attendance.csv`: Streaming CSV export.
+- `GET /api/reports/attendance.xlsx`: Formatted Microsoft Excel export.
+
+### Cameras & Audit
+- `GET, POST, PATCH, DELETE /api/cameras/`: Vision camera management.
+- `GET /api/audit-logs/`: Immutable administrative audit logs.
+- `GET /api/recognition/status/`: Engine provider status and parameters.
+
+---
+
+## WebSocket Recognition Contract
+
+**Endpoint**: `ws://localhost:8000/ws/recognition/{camera_id}/`
+
+### Client Frame Message
+```json
+{
+  "type": "frame",
+  "image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABA..."
+}
+```
+
+### Server Recognition Success Response
+```json
+{
+  "type": "recognition_result",
+  "recognized": true,
+  "student_id": "STU-2026-001",
+  "student_name": "Arun Kumar",
+  "department": "Computer Science & Engineering",
+  "confidence": 0.95,
+  "attendance_marked": true,
+  "already_marked": false,
+  "status": "PRESENT",
+  "check_in_time": "08:42:15",
+  "timestamp": "2026-09-21T03:00:00Z",
+  "message": "Attendance marked as PRESENT",
+  "bounding_boxes": [{"top": 80, "right": 320, "bottom": 360, "left": 120}],
+  "latency_ms": 142.5
+}
+```
+
+### Server Recognition Error Response
+```json
+{
+  "type": "recognition_error",
+  "code": "MULTIPLE_FACES",
+  "message": "Multiple faces detected. Only one student must be in view.",
+  "bounding_boxes": [...],
+  "latency_ms": 95.0
+}
+```
+
+---
+
+## Running Automated Tests
+
+### Backend Tests
+```powershell
+cd backend
+.\.venv\Scripts\pytest.exe
+```
+*Executes 13 automated tests covering authentication, permissions, duplicate prevention, and recognition vector computations.*
+
+### Frontend Production Build & TypeScript Verification
+```powershell
+cd frontend
+npm run build
+```
+*Validates TypeScript strict mode and compiles optimized production assets.*
+
+---
+
+## Docker Deployment (Optional)
+
+To run the full stack using Docker Compose:
+```bash
+docker-compose up --build
+```
+Services spun up:
+- `backend`: Daphne ASGI server (:8000)
+- `frontend`: Nginx reverse proxy (:80)
+- `postgres`: PostgreSQL database (:5432)
+- `redis`: Redis broker (:6379)
